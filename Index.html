@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    /* ── Reset & Base ─────────────────────────── */
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #0e0f11;
+      --bg-card: #18191d;
+      --bg-card-hover: #1f2024;
+      --bg-surface: #131416;
+      --border: #2a2b30;
+      --text-primary: #e8e6e1;
+      --text-secondary: #8a8880;
+      --text-muted: #5a5850;
+      --accent: #c4a882;
+      --accent-dim: rgba(196, 168, 130, 0.15);
+
+      /* Category Colors */
+      --cat-設計靈感: #e07a5f;
+      --cat-技術文章: #5fa8e0;
+      --cat-影片內容: #e05f8a;
+      --cat-商業觀點: #7ae05f;
+      --cat-生活靈感: #e0c55f;
+      --cat-工具資源: #a05fe0;
+      --cat-其他: #8a8880;
+
+      --radius: 12px;
+      --radius-sm: 8px;
+      --font: 'Noto Sans TC', -apple-system, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    html {
+      font-family: var(--font);
+      font-size: 15px;
+      background: var(--bg);
+      color: var(--text-primary);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      min-height: 100dvh;
+      padding-top: var(--safe-top);
+      padding-bottom: var(--safe-bottom);
+    }
+
+    /* ── Header ───────────────────────────────── */
+    .header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(14, 15, 17, 0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 20px 0;
+    }
+
+    .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .logo {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+    }
+    .logo span { color: var(--accent); }
+
+    .stat-badge {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      background: var(--bg-card);
+      padding: 4px 10px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+    }
+
+    /* ── Search ───────────────────────────────── */
+    .search-wrap {
+      position: relative;
+      margin-bottom: 14px;
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      pointer-events: none;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 11px 14px 11px 40px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-primary);
+      font-family: var(--font);
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .search-input::placeholder { color: var(--text-muted); }
+    .search-input:focus { border-color: var(--accent); }
+
+    /* ── Filter Tabs ──────────────────────────── */
+    .filters {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 14px;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .filters::-webkit-scrollbar { display: none; }
+
+    .filter-pill {
+      flex-shrink: 0;
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-secondary);
+      font-family: var(--font);
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .filter-pill:hover {
+      border-color: var(--text-muted);
+      color: var(--text-primary);
+    }
+    .filter-pill.active {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .filter-pill .count {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      margin-left: 4px;
+      opacity: 0.6;
+    }
+
+    /* ── Content Area ─────────────────────────── */
+    .content {
+      padding: 16px 20px 100px;
+    }
+
+    /* ── Cards ────────────────────────────────── */
+    .card-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-decoration: none;
+      color: inherit;
+      display: block;
+      position: relative;
+      overflow: hidden;
+    }
+    .card:hover, .card:active {
+      background: var(--bg-card-hover);
+      border-color: var(--text-muted);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .card-type-icon {
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+      background: var(--accent-dim);
+    }
+
+    .card-meta {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .card-summary {
+      font-size: 0.95rem;
+      font-weight: 500;
+      line-height: 1.5;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .card-title {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Image thumbnail */
+    .card-thumbnail {
+      width: 100%;
+      height: 180px;
+      object-fit: cover;
+      border-radius: var(--radius-sm);
+      margin-bottom: 10px;
+      background: var(--bg-surface);
+    }
+
+    /* Tags */
+    .card-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .tag {
+      font-size: 0.72rem;
+      font-weight: 500;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: var(--bg-surface);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+    }
+
+    /* Card footer */
+    .card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    .card-category {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .cat-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .card-platform {
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* OCR text preview */
+    .card-ocr {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      background: var(--bg-surface);
+      padding: 8px 10px;
+      border-radius: var(--radius-sm);
+      margin-bottom: 10px;
+      line-height: 1.5;
+      border-left: 2px solid var(--text-muted);
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    /* ── Empty State ──────────────────────────── */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+    }
+    .empty-state .icon { font-size: 3rem; margin-bottom: 16px; }
+    .empty-state p { font-size: 0.9rem; line-height: 1.6; }
+
+    /* ── Loading ──────────────────────────────── */
+    .loading {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+    }
+    .spinner {
+      width: 32px;
+      height: 32px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Responsive ───────────────────────────── */
+    @media (min-width: 768px) {
+      .header { padding: 20px 32px 0; }
+      .content { padding: 20px 32px 80px; }
+      .card-list {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 14px;
+      }
+    }
+    @media (min-width: 1200px) {
+      .header { padding: 20px 48px 0; max-width: 1200px; margin: 0 auto; }
+      .content { padding: 24px 48px 80px; max-width: 1200px; margin: 0 auto; }
+      .card-list { grid-template-columns: repeat(3, 1fr); }
+    }
+
+    /* ── Fade-in Animation ────────────────────── */
+    .card {
+      animation: fadeUp 0.3s ease both;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Login Screen ────────────────────────── */
+    .login-screen {
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .login-box {
+      width: 100%;
+      max-width: 340px;
+      text-align: center;
+    }
+    .login-logo {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: var(--text-primary);
+    }
+    .login-logo span { color: var(--accent); }
+    .login-subtitle {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-bottom: 32px;
+    }
+    .login-input {
+      width: 100%;
+      padding: 14px 18px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-primary);
+      font-family: var(--font);
+      font-size: 1rem;
+      outline: none;
+      text-align: center;
+      letter-spacing: 0.1em;
+      transition: border-color 0.2s;
+      margin-bottom: 14px;
+    }
+    .login-input:focus { border-color: var(--accent); }
+    .login-input::placeholder {
+      color: var(--text-muted);
+      letter-spacing: 0;
+    }
+    .login-btn {
+      width: 100%;
+      padding: 14px;
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      border-radius: var(--radius);
+      font-family: var(--font);
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .login-btn:hover { opacity: 0.85; }
+    .login-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .login-error {
+      color: #e07a5f;
+      font-size: 0.8rem;
+      margin-top: 12px;
+      display: none;
+    }
+    .login-error.show { display: block; }
+
+    /* ── Logout Button ───────────────────────── */
+    .logout-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      font-family: var(--font);
+      font-size: 0.72rem;
+      padding: 4px 10px;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .logout-btn:hover {
+      border-color: #e07a5f;
+      color: #e07a5f;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ★ Login Screen -->
+  <div id="loginScreen" class="login-screen">
+    <div class="login-box">
+      <div class="login-logo">收藏<span>庫</span></div>
+      <div class="login-subtitle">請輸入密碼以存取你的收藏</div>
+      <input
+        type="password"
+        class="login-input"
+        id="loginPassword"
+        placeholder="密碼"
+        autocomplete="off"
+      >
+      <button class="login-btn" id="loginBtn" onclick="handleLogin()">登入</button>
+      <div class="login-error" id="loginError">密碼不正確，請重試</div>
+    </div>
+  </div>
+
+  <!-- ★ Main App (hidden until logged in) -->
+  <div id="mainApp" style="display:none;">
+
+    <!-- Header -->
+    <div class="header">
+      <div class="header-top">
+        <div class="logo">收藏<span>庫</span></div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <div class="stat-badge" id="totalCount">—</div>
+          <button class="logout-btn" onclick="handleLogout()">登出</button>
+        </div>
+      </div>
+
+      <div class="search-wrap">
+        <div class="search-icon">🔍</div>
+        <input
+          type="text"
+          class="search-input"
+          id="searchInput"
+          placeholder="搜尋標題、標籤、摘要、OCR 文字⋯"
+          autocomplete="off"
+        >
+      </div>
+
+      <div class="filters" id="filterBar">
+        <button class="filter-pill active" data-category="全部">全部</button>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+      <div id="loading" class="loading">
+        <div class="spinner"></div>
+        <p>載入收藏中⋯</p>
+      </div>
+
+      <div id="cardList" class="card-list" style="display:none;"></div>
+
+      <div id="emptyState" class="empty-state" style="display:none;">
+        <div class="icon">📭</div>
+        <p>還沒有任何收藏<br>從任何 App 分享內容到「收藏它」開始吧</p>
+      </div>
+
+      <div id="noResults" class="empty-state" style="display:none;">
+        <div class="icon">🔍</div>
+        <p>找不到符合的收藏<br>試試其他關鍵字？</p>
+      </div>
+    </div>
+
+  </div><!-- /mainApp -->
+
+  <script>
+    // ── State ────────────────────────────────────
+    let allBookmarks = [];
+    let activeCategory = '全部';
+    let searchQuery = '';
+    let sessionToken = '';
+
+    // ── Session Management ───────────────────────
+    function getStoredToken() {
+      try { return localStorage.getItem('bookmark_session') || ''; }
+      catch(e) { return ''; }
+    }
+    function storeToken(token) {
+      try { localStorage.setItem('bookmark_session', token); }
+      catch(e) {}
+    }
+    function clearToken() {
+      try { localStorage.removeItem('bookmark_session'); }
+      catch(e) {}
+    }
+
+    // ── Login ────────────────────────────────────
+    function handleLogin() {
+      var pw = document.getElementById('loginPassword').value.trim();
+      if (!pw) return;
+
+      var btn = document.getElementById('loginBtn');
+      btn.disabled = true;
+      btn.textContent = '驗證中⋯';
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (result && result.success) {
+            sessionToken = result.token;
+            storeToken(sessionToken);
+            showMainApp();
+          } else {
+            document.getElementById('loginError').classList.add('show');
+            btn.disabled = false;
+            btn.textContent = '登入';
+          }
+        })
+        .withFailureHandler(function() {
+          document.getElementById('loginError').classList.add('show');
+          btn.disabled = false;
+          btn.textContent = '登入';
+        })
+        .webLogin(pw);
+    }
+
+    function handleLogout() {
+      sessionToken = '';
+      clearToken();
+      document.getElementById('mainApp').style.display = 'none';
+      document.getElementById('loginScreen').style.display = 'flex';
+      document.getElementById('loginPassword').value = '';
+      document.getElementById('loginError').classList.remove('show');
+    }
+
+    function showMainApp() {
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('mainApp').style.display = 'block';
+      loadBookmarks();
+      setupSearch();
+    }
+
+    // ── Init ────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', function() {
+      // Enter 鍵登入
+      document.getElementById('loginPassword').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') handleLogin();
+      });
+
+      // 檢查既有 session
+      var stored = getStoredToken();
+      if (stored) {
+        google.script.run
+          .withSuccessHandler(function(valid) {
+            if (valid) {
+              sessionToken = stored;
+              showMainApp();
+            } else {
+              clearToken();
+              // 停留在登入頁
+            }
+          })
+          .withFailureHandler(function() {
+            clearToken();
+          })
+          .webVerifySession(stored);
+      }
+    });
+
+    // ── Category Colors ─────────────────────────
+    const CAT_COLORS = {
+      '設計靈感': '#e07a5f',
+      '技術文章': '#5fa8e0',
+      '影片內容': '#e05f8a',
+      '商業觀點': '#7ae05f',
+      '生活靈感': '#e0c55f',
+      '工具資源': '#a05fe0',
+      '其他':     '#8a8880'
+    };
+
+    // ── Platform Icons ──────────────────────────
+    const PLATFORM_ICONS = {
+      'Instagram': '📸',
+      'YouTube':   '▶️',
+      'Threads':   '🧵',
+      'Facebook':  '👤',
+      'X':         '𝕏',
+      'TikTok':    '🎵',
+      'LinkedIn':  '💼',
+      'Medium':    '✍️',
+      'GitHub':    '🐙',
+      'Web':       '🌐',
+      '截圖':      '📷',
+      '文字':      '📝'
+    };
+
+    // ── Type Icons ──────────────────────────────
+    function getTypeIcon(type, platform) {
+      if (type === 'image') return '📷';
+      return PLATFORM_ICONS[platform] || '🔖';
+    }
+
+    function loadBookmarks() {
+      google.script.run
+        .withSuccessHandler(function(data) {
+          // 檢查是否為授權錯誤
+          if (data && data.error === 'unauthorized') {
+            handleLogout();
+            return;
+          }
+          allBookmarks = data || [];
+          buildFilters();
+          renderCards();
+          document.getElementById('loading').style.display = 'none';
+          document.getElementById('totalCount').textContent = allBookmarks.length + ' 筆';
+        })
+        .withFailureHandler(function(err) {
+          document.getElementById('loading').innerHTML =
+            '<p style="color: #e07a5f;">載入失敗：' + err.message + '</p>';
+        })
+        .getBookmarksSecure(sessionToken);
+    }
+
+    // ── Build Filter Pills ──────────────────────
+    function buildFilters() {
+      const counts = {};
+      allBookmarks.forEach(function(b) {
+        const cat = b.category || '其他';
+        counts[cat] = (counts[cat] || 0) + 1;
+      });
+
+      const bar = document.getElementById('filterBar');
+      // Update "全部" count
+      bar.querySelector('[data-category="全部"]').innerHTML =
+        '全部 <span class="count">' + allBookmarks.length + '</span>';
+
+      // Add category pills
+      Object.keys(CAT_COLORS).forEach(function(cat) {
+        if (!counts[cat]) return;
+        const pill = document.createElement('button');
+        pill.className = 'filter-pill';
+        pill.dataset.category = cat;
+        pill.innerHTML = cat + ' <span class="count">' + counts[cat] + '</span>';
+        bar.appendChild(pill);
+      });
+
+      // Click handlers
+      bar.addEventListener('click', function(e) {
+        const pill = e.target.closest('.filter-pill');
+        if (!pill) return;
+        bar.querySelectorAll('.filter-pill').forEach(function(p) { p.classList.remove('active'); });
+        pill.classList.add('active');
+        activeCategory = pill.dataset.category;
+        renderCards();
+      });
+    }
+
+    // ── Search ──────────────────────────────────
+    function setupSearch() {
+      let timer;
+      document.getElementById('searchInput').addEventListener('input', function(e) {
+        clearTimeout(timer);
+        timer = setTimeout(function() {
+          searchQuery = e.target.value.trim().toLowerCase();
+          renderCards();
+        }, 200);
+      });
+    }
+
+    // ── Filter Logic ────────────────────────────
+    function getFilteredBookmarks() {
+      return allBookmarks.filter(function(b) {
+        // Category filter
+        if (activeCategory !== '全部' && b.category !== activeCategory) return false;
+
+        // Search filter
+        if (searchQuery) {
+          const haystack = [
+            b.title, b.summary, b.tags, b.ocrText,
+            b.platform, b.category, b.url
+          ].join(' ').toLowerCase();
+          return haystack.includes(searchQuery);
+        }
+
+        return true;
+      });
+    }
+
+    // ── Render Cards ────────────────────────────
+    function renderCards() {
+      const filtered = getFilteredBookmarks();
+      const list = document.getElementById('cardList');
+      const empty = document.getElementById('emptyState');
+      const noResults = document.getElementById('noResults');
+
+      if (allBookmarks.length === 0) {
+        list.style.display = 'none';
+        empty.style.display = 'block';
+        noResults.style.display = 'none';
+        return;
+      }
+
+      if (filtered.length === 0) {
+        list.style.display = 'none';
+        empty.style.display = 'none';
+        noResults.style.display = 'block';
+        return;
+      }
+
+      empty.style.display = 'none';
+      noResults.style.display = 'none';
+      list.style.display = '';
+
+      list.innerHTML = filtered.map(function(b, i) {
+        const icon = getTypeIcon(b.type, b.platform);
+        const catColor = CAT_COLORS[b.category] || CAT_COLORS['其他'];
+        const href = b.url || '#';
+        const target = b.url ? ' target="_blank" rel="noopener"' : '';
+
+        // Parse tags
+        const tagsHtml = (b.tags || '').split(/\s+/).filter(function(t) {
+          return t.startsWith('#');
+        }).map(function(t) {
+          return '<span class="tag">' + escapeHtml(t) + '</span>';
+        }).join('');
+
+        // Thumbnail for images
+        const thumbHtml = (b.type === 'image' && b.imageUrl)
+          ? '<img class="card-thumbnail" src="' + escapeHtml(b.imageUrl) + '" loading="lazy" onerror="this.style.display=\'none\'">'
+          : '';
+
+        // OCR text
+        const ocrHtml = (b.ocrText && b.ocrText.trim())
+          ? '<div class="card-ocr">🔤 ' + escapeHtml(b.ocrText) + '</div>'
+          : '';
+
+        return '<a class="card" href="' + escapeHtml(href) + '"' + target +
+          ' style="animation-delay:' + (i * 0.03) + 's">' +
+          thumbHtml +
+          '<div class="card-header">' +
+            '<div class="card-type-icon">' + icon + '</div>' +
+            '<div class="card-meta">' +
+              '<div class="card-summary">' + escapeHtml(b.summary || b.title || '(無摘要)') + '</div>' +
+              '<div class="card-title">' + escapeHtml(b.title || '') + '</div>' +
+            '</div>' +
+          '</div>' +
+          (tagsHtml ? '<div class="card-tags">' + tagsHtml + '</div>' : '') +
+          ocrHtml +
+          '<div class="card-footer">' +
+            '<span class="card-category">' +
+              '<span class="cat-dot" style="background:' + catColor + '"></span>' +
+              escapeHtml(b.category || '其他') +
+            '</span>' +
+            '<span>' + escapeHtml(b.timestamp || '') + '</span>' +
+            '<span class="card-platform">' + escapeHtml(b.platform || '') + '</span>' +
+          '</div>' +
+        '</a>';
+      }).join('');
+    }
+
+    // ── Escape HTML ─────────────────────────────
+    function escapeHtml(str) {
+      if (!str) return '';
+      var div = document.createElement('div');
+      div.appendChild(document.createTextNode(str));
+      return div.innerHTML;
+    }
+  </script>
+
+</body>
+</html>

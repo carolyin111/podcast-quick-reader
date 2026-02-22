@@ -258,6 +258,7 @@ function processURL(data) {
   const rawUrl = data.url || '';
   const title = data.title || '';
   const shareText = data.shareText || data.text || '';
+  const memo = data.memo || '';
 
   // 清理 URL（移除追蹤參數）
   const url = cleanURL(rawUrl);
@@ -320,12 +321,16 @@ function processURL(data) {
 
   if (fetchSuccess) {
     aiContext = pageContent;
+    if (memo) {
+      aiContext = '使用者備註（優先參考）：' + memo.substring(0, 800) + '\n\n' + aiContext;
+    }
     if (shareText && shareText !== rawUrl && shareText !== url) {
       aiContext += '\n\n分享時附帶文字：' + shareText.substring(0, 500);
     }
   } else {
     // 抓不到內容 → 用所有其他線索
     const hints = [];
+    if (memo) hints.push('使用者備註（優先參考）：' + memo.substring(0, 800));
     if (platform && platform !== 'Web') hints.push('來源平台：' + platform);
     if (urlHints.username) hints.push('帳號：@' + urlHints.username);
     if (urlHints.contentType) hints.push('內容類型：' + urlHints.contentType);
@@ -351,6 +356,8 @@ function processURL(data) {
     category: aiResult.category,
     tags: aiResult.tags,
     summary: fetchSuccess ? aiResult.summary : '🔒 ' + aiResult.summary,
+    memo: memo,
+    fullText: pageContent || '',
     ocrText: '',
     platform: platform,
     imageUrl: previewImage || ''
@@ -371,6 +378,8 @@ function processText(data) {
     category: aiResult.category,
     tags: aiResult.tags,
     summary: aiResult.summary,
+    memo: '',
+    fullText: text,
     ocrText: '',
     platform: '文字',
     imageUrl: ''
@@ -406,6 +415,8 @@ function processImage(data) {
     category: aiResult.category,
     tags: aiResult.tags,
     summary: aiResult.summary,
+    memo: '',
+    fullText: aiResult.ocr_text || '',
     ocrText: aiResult.ocr_text || '',
     platform: '截圖',
     imageUrl: imageUrl
@@ -529,14 +540,14 @@ function saveToSheet(result) {
     sheet = ss.insertSheet(CONFIG.SHEET_NAME);
     sheet.appendRow([
       '時間戳記', '類型', '標題', 'URL', '分類',
-      '標籤', '摘要', 'OCR文字', '來源平台', '圖片URL'
+      '標籤', '摘要', '備註', '全文內容', 'OCR文字', '來源平台', '圖片URL'
     ]);
     sheet.setFrozenRows(1);
-    sheet.getRange(1, 1, 1, 10).setFontWeight('bold');
+    sheet.getRange(1, 1, 1, 12).setFontWeight('bold');
   }
 
   sheet.insertRowAfter(1);
-  sheet.getRange(2, 1, 1, 10).setValues([[
+  sheet.getRange(2, 1, 1, 12).setValues([[
     result.timestamp,
     result.type,
     result.title,
@@ -544,6 +555,8 @@ function saveToSheet(result) {
     result.category,
     result.tags,
     result.summary,
+    result.memo || '',
+    result.fullText || '',
     result.ocrText || '',
     result.platform || '',
     result.imageUrl || ''
@@ -558,7 +571,7 @@ function getBookmarks() {
 
   if (!sheet || sheet.getLastRow() < 2) return [];
 
-  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 10).getValues();
+  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 12).getValues();
 
   return data.map(function(row) {
     return {
@@ -569,9 +582,11 @@ function getBookmarks() {
       category: row[4],
       tags: row[5],
       summary: row[6],
-      ocrText: row[7],
-      platform: row[8],
-      imageUrl: row[9]
+      memo: row[7],
+      fullText: row[8],
+      ocrText: row[9],
+      platform: row[10],
+      imageUrl: row[11]
     };
   });
 }
@@ -586,13 +601,13 @@ function getStats() {
     return { total: 0, categories: {}, platforms: {} };
   }
 
-  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 10).getValues();
+  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 12).getValues();
   const categories = {};
   const platforms = {};
 
   data.forEach(function(row) {
     categories[row[4] || '其他'] = (categories[row[4] || '其他'] || 0) + 1;
-    platforms[row[8] || '未知'] = (platforms[row[8] || '未知'] || 0) + 1;
+    platforms[row[10] || '未知'] = (platforms[row[10] || '未知'] || 0) + 1;
   });
 
   return { total: data.length, categories: categories, platforms: platforms };
@@ -766,20 +781,24 @@ function parseMetaTags(html) {
 
 
 // ── Instagram JSON fallback ─────────────────────────────
-function extractInstagramShortcode(url) {
-  if (!url) return '';
-  var m = url.match(/instagram\.com\/(?:p|reel|tv)\/([^\/\?]+)/i);
-  return m ? m[1] : '';
+function extractInstagramInfo(url) {
+  if (!url) return { shortcode: '', type: '' };
+  var m = url.match(/instagram\.com\/(p|reel|tv)\/([^\/\?]+)/i);
+  return m ? { shortcode: m[2], type: m[1].toLowerCase() } : { shortcode: '', type: '' };
 }
 
 function fetchInstagramMeta(url) {
   var result = { text: '', image: '', success: false };
-  var shortcode = extractInstagramShortcode(url);
-  if (!shortcode) return result;
+  var info = extractInstagramInfo(url);
+  if (!info.shortcode) return result;
 
+  var primaryPath = info.type === 'reel' ? 'reel' : 'p';
   var endpoints = [
-    'https://www.instagram.com/p/' + shortcode + '/?__a=1&__d=dis',
-    'https://www.instagram.com/p/' + shortcode + '/?__a=1'
+    'https://www.instagram.com/' + primaryPath + '/' + info.shortcode + '/?__a=1&__d=dis',
+    'https://www.instagram.com/' + primaryPath + '/' + info.shortcode + '/?__a=1',
+    // fallback to /p/ in case reels endpoint is blocked
+    'https://www.instagram.com/p/' + info.shortcode + '/?__a=1&__d=dis',
+    'https://www.instagram.com/p/' + info.shortcode + '/?__a=1'
   ];
 
   for (var i = 0; i < endpoints.length; i++) {
@@ -983,7 +1002,8 @@ function generateRandomKey(length) {
 function testWithURL() {
   var testUrls = [
     'https://www.threads.com/@nicodequkuairiji/post/DU2Ov5oCa_4?xmt=AQF0JS4af3JX2AKMtm0-7vLap6Uvcz9SeqFuL947AgTI1wzGAoHubka_qC9vO2gwzkGqNQk&slof=1',
-    'https://www.instagram.com/p/DUzkiIHkTdl/?igsh=MWRiYjIxeHdoNDIycQ=='
+    'https://www.instagram.com/p/DUzkiIHkTdl/?igsh=MWRiYjIxeHdoNDIycQ==',
+    'https://www.instagram.com/reel/DUDQR4PDzgo/?igsh=MTdkOW01a2l0c242'
   ];
 
   // 測試 HTML entity 解碼
@@ -1002,10 +1022,18 @@ function testWithURL() {
     var platform = detectPlatform(testUrl);
     Logger.log('平台偵測: ' + platform);
 
-    var hints = extractURLHints(testUrl);
-    Logger.log('URL 線索: ' + JSON.stringify(hints));
+  var hints = extractURLHints(testUrl);
+  Logger.log('URL 線索: ' + JSON.stringify(hints));
 
-    // 測試 fetch + parseMetaTags
+  // Instagram JSON fallback 測試（抓 caption）
+  if (platform === 'Instagram') {
+    var igMeta = fetchInstagramMeta(cleaned);
+    Logger.log('IG JSON success: ' + igMeta.success);
+    Logger.log('IG JSON text: ' + igMeta.text);
+    Logger.log('IG JSON image: ' + (igMeta.image ? igMeta.image.substring(0, 100) + '...' : '(none)'));
+  }
+
+  // 測試 fetch + parseMetaTags
     try {
       var response = UrlFetchApp.fetch(cleaned, {
         muteHttpExceptions: true,
