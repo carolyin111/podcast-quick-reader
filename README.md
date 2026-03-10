@@ -23,6 +23,7 @@ Open `http://localhost:3000`.
 - Requires `ASSEMBLYAI_API_KEY` in environment variables
 - Optional password gate via `APP_PASSWORD`
 - Stores up to 100 recent analysis results in `HISTORY_FILE` for the `/history` page
+- History page supports deleting a single entry and clearing all saved entries
 - A long episode can take several minutes because the server polls AssemblyAI until transcription completes
 - Debug endpoint: `GET /api/debug/env` returns only whether required env vars are configured, and requires login when `APP_PASSWORD` is enabled
 

@@ -199,10 +199,27 @@ button:disabled {
   align-items: flex-start;
 }
 
+.history-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .history-columns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
+}
+
+.danger-button {
+  color: #8a1f16;
+  border-color: rgba(138, 31, 22, 0.3);
+}
+
+.danger-button:hover {
+  background: rgba(138, 31, 22, 0.08);
 }
 
 .auth-shell {

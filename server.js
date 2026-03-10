@@ -175,6 +175,20 @@ async function saveHistoryEntry(result) {
   await writeHistory(history.slice(0, 100));
 }
 
+async function deleteHistoryEntry(entryId) {
+  const history = await readHistory();
+  const nextHistory = history.filter((entry) => entry.id !== entryId);
+  const deleted = nextHistory.length !== history.length;
+  if (deleted) {
+    await writeHistory(nextHistory);
+  }
+  return deleted;
+}
+
+async function clearHistory() {
+  await writeHistory([]);
+}
+
 function clampScore(score) {
   return Math.max(1, Math.min(10, score));
 }
@@ -646,6 +660,33 @@ const server = http.createServer(async (req, res) => {
       }
       const history = await readHistory();
       sendJson(res, 200, { items: history });
+      return;
+    }
+
+    if (req.method === "DELETE" && req.url.startsWith("/api/history/")) {
+      if (!requireAuth(req, res)) {
+        return;
+      }
+      const entryId = decodeURIComponent(req.url.slice("/api/history/".length));
+      if (!entryId) {
+        sendJson(res, 400, { error: "Missing history entry id." });
+        return;
+      }
+      const deleted = await deleteHistoryEntry(entryId);
+      if (!deleted) {
+        sendJson(res, 404, { error: "History entry not found." });
+        return;
+      }
+      sendJson(res, 200, { ok: true, deletedId: entryId });
+      return;
+    }
+
+    if (req.method === "DELETE" && req.url === "/api/history") {
+      if (!requireAuth(req, res)) {
+        return;
+      }
+      await clearHistory();
+      sendJson(res, 200, { ok: true });
       return;
     }
 
