@@ -54,17 +54,17 @@ function renderHistoryItem(item) {
   return `
     <article class="card history-card">
       <div class="history-header">
-        <div>
+        <div class="history-title">
           <p class="eyebrow">Saved ${new Date(item.created_at).toLocaleString("zh-TW")}</p>
           <h2>Score ${escapeHtml(item.estimated_value_score)}/10 - ${escapeHtml(item.recommendation)}</h2>
         </div>
         <div class="history-actions">
-          <p class="meta">${escapeHtml(item.audio_minutes)} minutes</p>
+          <p class="meta history-duration">${escapeHtml(item.audio_minutes)} minutes</p>
           <button type="button" class="secondary-button danger-button" data-delete-id="${escapeHtml(item.id)}">刪除</button>
         </div>
       </div>
-      <p class="meta"><strong>Source:</strong> <a href="${escapeHtml(item.input_url)}" target="_blank" rel="noreferrer">${escapeHtml(item.input_url)}</a></p>
-      <p class="meta"><strong>Goal:</strong> ${escapeHtml(item.interest_goal || "")}</p>
+      <p class="meta history-meta"><strong>Source:</strong> <a href="${escapeHtml(item.input_url)}" target="_blank" rel="noreferrer">${escapeHtml(item.input_url)}</a></p>
+      <p class="meta history-meta"><strong>Goal:</strong> ${escapeHtml(item.interest_goal || "")}</p>
       <div class="prose">${escapeHtml(item.assemblyai_summary || "No summary returned.")}</div>
       <div class="history-columns">
         <section>
