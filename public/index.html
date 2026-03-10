@@ -14,6 +14,10 @@
         <p class="lede">
           貼上 podcast episode 連結、Apple Podcasts 單集頁，或直接貼 mp3/m4a。系統會嘗試解析音訊、產出逐字稿摘要，並快速估算這集值不值得完整收聽。
         </p>
+        <div class="hero-actions">
+          <p class="meta">AssemblyAI API key 由伺服器環境變數提供。</p>
+          <button type="button" id="logout-button" class="secondary-button">登出</button>
+        </div>
       </section>
 
       <section class="panel">
@@ -35,16 +39,6 @@
               rows="4"
               placeholder="例如：我想判斷這集對 AI 產品經理是否有價值"
             ></textarea>
-          </label>
-
-          <label>
-            <span>AssemblyAI API Key</span>
-            <input
-              type="password"
-              name="assemblyai_api_key"
-              placeholder="輸入你的 AssemblyAI API key"
-              required
-            />
           </label>
 
           <button type="submit" id="submit-button">開始分析</button>

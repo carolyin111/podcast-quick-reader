@@ -1,10 +1,15 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
 const HOST = process.env.HOST || "0.0.0.0";
 const PORT = Number(process.env.PORT || 3000);
 const PUBLIC_DIR = path.join(__dirname, "public");
+const APP_PASSWORD = String(process.env.APP_PASSWORD || "").trim();
+const ASSEMBLYAI_API_KEY = String(process.env.ASSEMBLYAI_API_KEY || "").trim();
+const SESSION_COOKIE = "podcast_reader_session";
+const activeSessions = new Set();
 
 const AUDIO_FILE_PATTERN = /\.(mp3|m4a|mp4|wav|aac|ogg)(\?|$)/i;
 const APPLE_PODCAST_HOST_PATTERN = /(^|\.)podcasts\.apple\.com$/i;
@@ -18,16 +23,17 @@ const MEDIA_PATTERNS = [
   /"contentUrl"\s*:\s*"([^"]+)"/i
 ];
 
-function sendJson(res, statusCode, payload) {
+function sendJson(res, statusCode, payload, headers = {}) {
   const body = JSON.stringify(payload);
   res.writeHead(statusCode, {
     "Content-Type": "application/json; charset=utf-8",
-    "Content-Length": Buffer.byteLength(body)
+    "Content-Length": Buffer.byteLength(body),
+    ...headers
   });
   res.end(body);
 }
 
-function sendFile(res, filePath) {
+function sendFile(res, filePath, headers = {}) {
   fs.readFile(filePath, (error, content) => {
     if (error) {
       sendJson(res, 404, { error: "Not found" });
@@ -41,7 +47,7 @@ function sendFile(res, filePath) {
         ? "application/javascript; charset=utf-8"
         : "text/html; charset=utf-8";
 
-    res.writeHead(200, { "Content-Type": type });
+    res.writeHead(200, { "Content-Type": type, ...headers });
     res.end(content);
   });
 }
@@ -74,6 +80,48 @@ function readJsonBody(req) {
     });
     req.on("error", reject);
   });
+}
+
+function parseCookies(req) {
+  const raw = req.headers.cookie || "";
+  return raw.split(";").reduce((cookies, item) => {
+    const [key, ...rest] = item.trim().split("=");
+    if (!key) {
+      return cookies;
+    }
+    cookies[key] = decodeURIComponent(rest.join("=") || "");
+    return cookies;
+  }, {});
+}
+
+function createSessionToken() {
+  return crypto.randomBytes(24).toString("hex");
+}
+
+function buildSessionCookie(token) {
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  return `${SESSION_COOKIE}=${token}; HttpOnly; Path=/; SameSite=Lax; Max-Age=86400${secure}`;
+}
+
+function clearSessionCookie() {
+  return `${SESSION_COOKIE}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0`;
+}
+
+function isAuthenticated(req) {
+  if (!APP_PASSWORD) {
+    return true;
+  }
+  const cookies = parseCookies(req);
+  const token = cookies[SESSION_COOKIE];
+  return Boolean(token && activeSessions.has(token));
+}
+
+function requireAuth(req, res) {
+  if (isAuthenticated(req)) {
+    return true;
+  }
+  sendJson(res, 401, { error: "Unauthorized" });
+  return false;
 }
 
 function clampScore(score) {
@@ -433,13 +481,13 @@ function buildAnalysisResult({ rawUrl, mediaResolution, goal, transcript }) {
 async function analyzePodcast(body) {
   const rawUrl = String(body.podcast_url || body.audio_url || body.url || "").trim();
   const goal = String(body.interest_goal || "General learning value for a busy knowledge worker").trim();
-  const apiKey = String(body.assemblyai_api_key || "").trim();
+  const apiKey = ASSEMBLYAI_API_KEY;
 
   if (!rawUrl) {
     throw new Error("Missing `podcast_url` or `audio_url`.");
   }
   if (!apiKey) {
-    throw new Error("Missing `assemblyai_api_key`.");
+    throw new Error("Missing `ASSEMBLYAI_API_KEY` environment variable.");
   }
 
   const mediaResolution = await resolveMediaUrl(rawUrl);
@@ -451,12 +499,31 @@ async function analyzePodcast(body) {
 const server = http.createServer(async (req, res) => {
   try {
     if (req.method === "GET" && req.url === "/") {
+      if (!isAuthenticated(req)) {
+        res.writeHead(302, { Location: "/login" });
+        res.end();
+        return;
+      }
       sendFile(res, path.join(PUBLIC_DIR, "index.html"));
       return;
     }
 
     if (req.method === "HEAD" && req.url === "/") {
+      if (!isAuthenticated(req)) {
+        sendHead(res, 302, "text/html; charset=utf-8");
+        return;
+      }
       sendHead(res, 200, "text/html; charset=utf-8");
+      return;
+    }
+
+    if (req.method === "GET" && req.url === "/login") {
+      if (isAuthenticated(req)) {
+        res.writeHead(302, { Location: "/" });
+        res.end();
+        return;
+      }
+      sendFile(res, path.join(PUBLIC_DIR, "login.html"));
       return;
     }
 
@@ -480,7 +547,50 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "GET" && req.url === "/login.js") {
+      sendFile(res, path.join(PUBLIC_DIR, "login.js"));
+      return;
+    }
+
+    if (req.method === "GET" && req.url === "/api/session") {
+      sendJson(res, 200, { authenticated: isAuthenticated(req), passwordEnabled: Boolean(APP_PASSWORD) });
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/api/login") {
+      if (!APP_PASSWORD) {
+        sendJson(res, 200, { ok: true, passwordEnabled: false });
+        return;
+      }
+
+      const body = await readJsonBody(req);
+      const password = String(body.password || "");
+      if (password !== APP_PASSWORD) {
+        sendJson(res, 401, { error: "Wrong password." });
+        return;
+      }
+
+      const token = createSessionToken();
+      activeSessions.add(token);
+      sendJson(res, 200, { ok: true }, { "Set-Cookie": buildSessionCookie(token) });
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/api/logout") {
+      const cookies = parseCookies(req);
+      const token = cookies[SESSION_COOKIE];
+      if (token) {
+        activeSessions.delete(token);
+      }
+      res.writeHead(204, { "Set-Cookie": clearSessionCookie() });
+      res.end();
+      return;
+    }
+
     if (req.method === "POST" && req.url === "/api/analyze") {
+      if (!requireAuth(req, res)) {
+        return;
+      }
       const body = await readJsonBody(req);
       const result = await analyzePodcast(body);
       sendJson(res, 200, result);

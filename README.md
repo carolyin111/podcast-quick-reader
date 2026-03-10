@@ -20,7 +20,8 @@ Open `http://localhost:3000`.
 
 ## Notes
 
-- Requires your own AssemblyAI API key
+- Requires `ASSEMBLYAI_API_KEY` in environment variables
+- Optional password gate via `APP_PASSWORD`
 - A long episode can take several minutes because the server polls AssemblyAI until transcription completes
 
 ## Deployment
@@ -44,8 +45,11 @@ To deploy on Zeabur:
 
 1. Create a project in Zeabur
 2. Import GitHub repo `carolyin111/podcast-quick-reader`
-3. Let Zeabur detect the Dockerfile or use the included `zeabur.json`
-4. Deploy the service
-5. Bind a domain in Zeabur if needed
+3. In Zeabur environment variables, set:
+   `ASSEMBLYAI_API_KEY=...`
+   `APP_PASSWORD=...`
+4. Let Zeabur detect the Dockerfile or use the included `zeabur.json`
+5. Deploy the service
+6. Bind a domain in Zeabur if needed
 
 You do not need GitHub Actions deploy secrets for Zeabur. Pushes to GitHub can trigger redeploys through Zeabur's GitHub integration.

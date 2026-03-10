@@ -35,6 +35,14 @@ body {
   margin-bottom: 24px;
 }
 
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
 .eyebrow {
   margin: 0 0 10px;
   font-size: 0.8rem;
@@ -132,6 +140,16 @@ button {
   transition: transform 160ms ease, background 160ms ease;
 }
 
+.secondary-button {
+  background: transparent;
+  color: var(--accent-dark);
+  border: 1px solid rgba(141, 51, 22, 0.28);
+}
+
+.secondary-button:hover {
+  background: rgba(141, 51, 22, 0.08);
+}
+
 button:hover {
   transform: translateY(-1px);
   background: var(--accent-dark);
@@ -150,6 +168,20 @@ button:disabled {
 
 .result {
   margin-top: 28px;
+}
+
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+}
+
+.auth-panel {
+  width: min(520px, 100%);
+}
+
+.auth-form {
+  margin-top: 20px;
 }
 
 .hidden {

@@ -1,5 +1,6 @@
 const form = document.getElementById("analyze-form");
 const submitButton = document.getElementById("submit-button");
+const logoutButton = document.getElementById("logout-button");
 const statusNode = document.getElementById("status");
 const resultSection = document.getElementById("result");
 const scoreLine = document.getElementById("score-line");
@@ -23,6 +24,11 @@ function renderList(node, items, renderItem) {
     node.appendChild(li);
   }
 }
+
+logoutButton.addEventListener("click", async () => {
+  await fetch("/api/logout", { method: "POST" });
+  window.location.href = "/login";
+});
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
