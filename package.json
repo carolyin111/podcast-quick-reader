@@ -1,0 +1,9 @@
+{
+  "name": "podcast-summary-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Standalone web app for podcast transcript and summary analysis with AssemblyAI.",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

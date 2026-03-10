@@ -1,0 +1,500 @@
+const http = require("http");
+const fs = require("fs");
+const path = require("path");
+
+const HOST = process.env.HOST || "0.0.0.0";
+const PORT = Number(process.env.PORT || 3000);
+const PUBLIC_DIR = path.join(__dirname, "public");
+
+const AUDIO_FILE_PATTERN = /\.(mp3|m4a|mp4|wav|aac|ogg)(\?|$)/i;
+const APPLE_PODCAST_HOST_PATTERN = /(^|\.)podcasts\.apple\.com$/i;
+const MEDIA_PATTERNS = [
+  /property=["']og:audio["'][^>]*content=["']([^"']+)["']/i,
+  /name=["']twitter:player:stream["'][^>]*content=["']([^"']+)["']/i,
+  /<audio[^>]*src=["']([^"']+)["']/i,
+  /<source[^>]*src=["']([^"']+)["']/i,
+  /enclosure[^>]*url=["']([^"']+)["']/i,
+  /"audio"\s*:\s*"([^"]+)"/i,
+  /"contentUrl"\s*:\s*"([^"]+)"/i
+];
+
+function sendJson(res, statusCode, payload) {
+  const body = JSON.stringify(payload);
+  res.writeHead(statusCode, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Content-Length": Buffer.byteLength(body)
+  });
+  res.end(body);
+}
+
+function sendFile(res, filePath) {
+  fs.readFile(filePath, (error, content) => {
+    if (error) {
+      sendJson(res, 404, { error: "Not found" });
+      return;
+    }
+
+    const ext = path.extname(filePath);
+    const type = ext === ".css"
+      ? "text/css; charset=utf-8"
+      : ext === ".js"
+        ? "application/javascript; charset=utf-8"
+        : "text/html; charset=utf-8";
+
+    res.writeHead(200, { "Content-Type": type });
+    res.end(content);
+  });
+}
+
+function sendHead(res, statusCode, contentType = "text/plain; charset=utf-8") {
+  res.writeHead(statusCode, { "Content-Type": contentType });
+  res.end();
+}
+
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let raw = "";
+    req.on("data", (chunk) => {
+      raw += chunk;
+      if (raw.length > 1024 * 1024) {
+        reject(new Error("Request body too large."));
+        req.destroy();
+      }
+    });
+    req.on("end", () => {
+      if (!raw) {
+        resolve({});
+        return;
+      }
+      try {
+        resolve(JSON.parse(raw));
+      } catch {
+        reject(new Error("Invalid JSON body."));
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+function clampScore(score) {
+  return Math.max(1, Math.min(10, score));
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function decodeXml(value = "") {
+  return value
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'")
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#([0-9]+);/g, (_, num) => String.fromCodePoint(parseInt(num, 10)));
+}
+
+function normalizeText(value = "") {
+  return decodeXml(String(value))
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[\u{1F300}-\u{1FAFF}]/gu, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function extractTag(block, tagName) {
+  const pattern = new RegExp(`<${escapeRegExp(tagName)}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${escapeRegExp(tagName)}>`, "i");
+  const match = block.match(pattern);
+  return match ? decodeXml(match[1].trim()) : "";
+}
+
+function extractAttribute(block, tagName, attributeName) {
+  const pattern = new RegExp(
+    `<${escapeRegExp(tagName)}\\b[^>]*\\b${escapeRegExp(attributeName)}=["']([^"']+)["'][^>]*>`,
+    "i"
+  );
+  const match = block.match(pattern);
+  return match ? decodeXml(match[1].trim()) : "";
+}
+
+function parseRssItems(xml) {
+  const itemBlocks = xml.match(/<item\b[\s\S]*?<\/item>/gi) || [];
+  return itemBlocks.map((block) => ({
+    title: extractTag(block, "title"),
+    link: extractTag(block, "link"),
+    guid: extractTag(block, "guid"),
+    description: extractTag(block, "description"),
+    enclosureUrl: extractAttribute(block, "enclosure", "url"),
+    raw: block
+  }));
+}
+
+function buildAppleSlugHints(url) {
+  try {
+    const parsed = new URL(url);
+    const segments = parsed.pathname.split("/").filter(Boolean);
+    const podcastIndex = segments.findIndex((segment) => segment === "podcast");
+    const slug = podcastIndex >= 0 ? segments[podcastIndex + 1] || "" : "";
+    return decodeURIComponent(slug).replace(/-/g, " ");
+  } catch {
+    return "";
+  }
+}
+
+function parseApplePodcastUrl(url) {
+  try {
+    const parsed = new URL(url);
+    if (!APPLE_PODCAST_HOST_PATTERN.test(parsed.hostname)) {
+      return null;
+    }
+
+    const match = parsed.pathname.match(/\/id(\d+)/i);
+    if (!match) {
+      return null;
+    }
+
+    return {
+      podcastId: match[1],
+      episodeId: parsed.searchParams.get("i") || "",
+      slugHint: buildAppleSlugHints(url)
+    };
+  } catch {
+    return null;
+  }
+}
+
+function extractAppleTitle(html, fallbackSlug) {
+  const metaTitle =
+    html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)?.[1] ||
+    html.match(/<title>([^<]+)<\/title>/i)?.[1] ||
+    "";
+  const cleanedTitle = decodeXml(metaTitle)
+    .replace(/\s+on Apple Podcasts\s*$/i, "")
+    .replace(/\s+-\s+Apple Podcasts\s*$/i, "")
+    .trim();
+  return cleanedTitle || fallbackSlug;
+}
+
+async function fetchApplePodcastLookup(podcastId) {
+  const response = await fetch(`https://itunes.apple.com/lookup?id=${encodeURIComponent(podcastId)}`, {
+    redirect: "follow"
+  });
+  if (!response.ok) {
+    throw new Error(`Apple lookup failed: ${response.status}`);
+  }
+  const data = await response.json();
+  const podcast = Array.isArray(data.results)
+    ? data.results.find((item) => item.wrapperType === "track" || item.kind === "podcast")
+    : null;
+
+  if (!podcast?.feedUrl) {
+    throw new Error("Could not find podcast RSS feed from Apple metadata.");
+  }
+
+  return podcast;
+}
+
+function scoreFeedItem(item, hints) {
+  const title = normalizeText(item.title);
+  const candidateTexts = [item.link, item.guid, item.description].map(normalizeText).join(" ");
+  let score = 0;
+
+  if (hints.episodeId && candidateTexts.includes(hints.episodeId)) {
+    score += 10;
+  }
+  if (hints.title && title === hints.title) {
+    score += 8;
+  }
+  if (hints.title && title.includes(hints.title)) {
+    score += 6;
+  }
+  if (hints.title && hints.title.includes(title) && title) {
+    score += 4;
+  }
+  if (hints.slug && title.includes(hints.slug)) {
+    score += 3;
+  }
+
+  return score;
+}
+
+function findBestFeedItem(items, hints) {
+  let bestItem = null;
+  let bestScore = 0;
+
+  for (const item of items) {
+    const score = scoreFeedItem(item, hints);
+    if (score > bestScore) {
+      bestScore = score;
+      bestItem = item;
+    }
+  }
+
+  return bestScore > 0 ? bestItem : null;
+}
+
+async function resolveApplePodcastEpisode(url) {
+  const parsedAppleUrl = parseApplePodcastUrl(url);
+  if (!parsedAppleUrl) {
+    return null;
+  }
+
+  const [lookup, pageResponse] = await Promise.all([
+    fetchApplePodcastLookup(parsedAppleUrl.podcastId),
+    fetch(url, { redirect: "follow" })
+  ]);
+
+  if (!pageResponse.ok) {
+    throw new Error(`Failed to load Apple Podcasts page: ${pageResponse.status}`);
+  }
+
+  const pageHtml = await pageResponse.text();
+  const appleTitle = extractAppleTitle(pageHtml, parsedAppleUrl.slugHint);
+  const rssResponse = await fetch(lookup.feedUrl, { redirect: "follow" });
+  if (!rssResponse.ok) {
+    throw new Error(`Failed to load podcast RSS feed: ${rssResponse.status}`);
+  }
+
+  const rssXml = await rssResponse.text();
+  const items = parseRssItems(rssXml);
+  const matchedItem = findBestFeedItem(items, {
+    episodeId: normalizeText(parsedAppleUrl.episodeId),
+    title: normalizeText(appleTitle),
+    slug: normalizeText(parsedAppleUrl.slugHint)
+  });
+
+  if (!matchedItem?.enclosureUrl) {
+    throw new Error("Could not match this Apple Podcasts episode to an RSS item with audio.");
+  }
+
+  return {
+    audioUrl: matchedItem.enclosureUrl,
+    episodeLink: matchedItem.link,
+    rssFeedUrl: lookup.feedUrl,
+    resolvedFrom: "apple_podcasts"
+  };
+}
+
+function pickMediaUrl(html, baseUrl) {
+  for (const pattern of MEDIA_PATTERNS) {
+    const match = html.match(pattern);
+    if (match && match[1]) {
+      try {
+        return new URL(match[1], baseUrl).href;
+      } catch {
+        return match[1];
+      }
+    }
+  }
+  return null;
+}
+
+async function resolveMediaUrl(url) {
+  if (AUDIO_FILE_PATTERN.test(url)) {
+    return { audioUrl: url, episodeLink: "", rssFeedUrl: "", resolvedFrom: "direct_audio" };
+  }
+
+  const appleEpisode = await resolveApplePodcastEpisode(url);
+  if (appleEpisode) {
+    return appleEpisode;
+  }
+
+  let headResponse = null;
+  try {
+    headResponse = await fetch(url, { method: "HEAD", redirect: "follow" });
+  } catch {
+    headResponse = null;
+  }
+
+  const headType = headResponse?.headers?.get("content-type") || "";
+  const finalHeadUrl = headResponse?.url || url;
+  if (headType.startsWith("audio/") || headType.startsWith("video/")) {
+    return { audioUrl: finalHeadUrl, episodeLink: "", rssFeedUrl: "", resolvedFrom: "direct_media_head" };
+  }
+  if (AUDIO_FILE_PATTERN.test(finalHeadUrl)) {
+    return { audioUrl: finalHeadUrl, episodeLink: "", rssFeedUrl: "", resolvedFrom: "direct_media_redirect" };
+  }
+
+  const pageResponse = await fetch(url, { redirect: "follow" });
+  if (!pageResponse.ok) {
+    throw new Error(`Failed to load page: ${pageResponse.status}`);
+  }
+
+  const html = await pageResponse.text();
+  const mediaUrl = pickMediaUrl(html, pageResponse.url);
+  if (mediaUrl) {
+    return { audioUrl: mediaUrl, episodeLink: pageResponse.url, rssFeedUrl: "", resolvedFrom: "page_scrape" };
+  }
+
+  throw new Error("Could not find an audio URL on this page. Try a direct MP3/M4A link or an RSS episode link.");
+}
+
+async function createTranscript(audioUrl, apiKey) {
+  const response = await fetch("https://api.assemblyai.com/v2/transcript", {
+    method: "POST",
+    headers: {
+      Authorization: apiKey,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      audio_url: audioUrl,
+      speech_models: ["universal-3-pro", "universal-2"],
+      auto_chapters: true,
+      auto_highlights: true,
+      speaker_labels: false,
+      language_detection: true,
+      punctuate: true
+    })
+  });
+
+  const data = await response.json();
+  if (!response.ok || !data.id) {
+    throw new Error(`AssemblyAI submit failed: ${JSON.stringify(data)}`);
+  }
+  return data.id;
+}
+
+async function pollTranscript(transcriptId, apiKey) {
+  for (let attempt = 0; attempt < 90; attempt += 1) {
+    const response = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
+      headers: { Authorization: apiKey }
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(`AssemblyAI poll failed: ${JSON.stringify(data)}`);
+    }
+    if (data.status === "completed") {
+      return data;
+    }
+    if (data.status === "error") {
+      throw new Error(`AssemblyAI transcription error: ${data.error || "unknown error"}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10000));
+  }
+
+  throw new Error("Timed out waiting for transcript. Increase polling duration if your podcast is very long.");
+}
+
+function buildAnalysisResult({ rawUrl, mediaResolution, goal, transcript }) {
+  const highlights = (transcript.auto_highlights_result?.results || [])
+    .slice(0, 10)
+    .map((item) => item.text);
+  const chapters = (transcript.chapters || []).map((item) => ({
+    headline: item.headline,
+    summary: item.summary,
+    start_ms: item.start,
+    end_ms: item.end
+  }));
+  const chapterSummary = chapters
+    .slice(0, 5)
+    .map((item) => `- ${item.headline || "Untitled"}: ${item.summary || ""}`)
+    .join("\n");
+  const derivedSummary = chapterSummary || highlights.slice(0, 5).map((item) => `- ${item}`).join("\n");
+  const minutes = Math.round((transcript.audio_duration || 0) / 60);
+
+  let score = 5;
+  if (highlights.length >= 3) score += 1;
+  if (highlights.length >= 6) score += 1;
+  if (chapters.length >= 2) score += 1;
+  if (chapters.length >= 4) score += 1;
+  if (derivedSummary) score += 1;
+  if (minutes >= 15 && minutes <= 90) score += 1;
+  if (minutes > 120) score -= 1;
+
+  const estimatedValueScore = clampScore(score);
+  const recommendation = estimatedValueScore >= 8
+    ? "Worth a full listen."
+    : "Read the summary first, then decide.";
+
+  return {
+    input_url: rawUrl,
+    resolved_audio_url: mediaResolution.audioUrl,
+    resolved_episode_link: mediaResolution.episodeLink || "",
+    resolved_rss_feed_url: mediaResolution.rssFeedUrl || "",
+    resolved_from: mediaResolution.resolvedFrom,
+    interest_goal: goal,
+    transcript_id: transcript.id,
+    speech_model_used: transcript.speech_model_used || "",
+    audio_minutes: minutes,
+    estimated_value_score: estimatedValueScore,
+    recommendation,
+    note: "The score is heuristic. Use chapters, highlights, and summary to make the final decision.",
+    assemblyai_summary: derivedSummary,
+    key_highlights: highlights,
+    chapters,
+    transcript: transcript.text || ""
+  };
+}
+
+async function analyzePodcast(body) {
+  const rawUrl = String(body.podcast_url || body.audio_url || body.url || "").trim();
+  const goal = String(body.interest_goal || "General learning value for a busy knowledge worker").trim();
+  const apiKey = String(body.assemblyai_api_key || "").trim();
+
+  if (!rawUrl) {
+    throw new Error("Missing `podcast_url` or `audio_url`.");
+  }
+  if (!apiKey) {
+    throw new Error("Missing `assemblyai_api_key`.");
+  }
+
+  const mediaResolution = await resolveMediaUrl(rawUrl);
+  const transcriptId = await createTranscript(mediaResolution.audioUrl, apiKey);
+  const transcript = await pollTranscript(transcriptId, apiKey);
+  return buildAnalysisResult({ rawUrl, mediaResolution, goal, transcript });
+}
+
+const server = http.createServer(async (req, res) => {
+  try {
+    if (req.method === "GET" && req.url === "/") {
+      sendFile(res, path.join(PUBLIC_DIR, "index.html"));
+      return;
+    }
+
+    if (req.method === "HEAD" && req.url === "/") {
+      sendHead(res, 200, "text/html; charset=utf-8");
+      return;
+    }
+
+    if (req.method === "GET" && req.url === "/health") {
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === "HEAD" && req.url === "/health") {
+      sendHead(res, 200, "application/json; charset=utf-8");
+      return;
+    }
+
+    if (req.method === "GET" && req.url === "/styles.css") {
+      sendFile(res, path.join(PUBLIC_DIR, "styles.css"));
+      return;
+    }
+
+    if (req.method === "GET" && req.url === "/app.js") {
+      sendFile(res, path.join(PUBLIC_DIR, "app.js"));
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/api/analyze") {
+      const body = await readJsonBody(req);
+      const result = await analyzePodcast(body);
+      sendJson(res, 200, result);
+      return;
+    }
+
+    sendJson(res, 404, { error: "Not found" });
+  } catch (error) {
+    sendJson(res, 400, {
+      error: error instanceof Error ? error.message : "Unknown error"
+    });
+  }
+});
+
+server.listen(PORT, HOST, () => {
+  console.log(`Podcast Summary web app listening on http://${HOST}:${PORT}`);
+});

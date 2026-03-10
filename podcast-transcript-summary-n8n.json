@@ -1,0 +1,80 @@
+{
+  "name": "Podcast Transcript + Summary (AssemblyAI)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "podcast-evaluator",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "Webhook_1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        300
+      ],
+      "webhookId": "podcast-evaluator"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input=items[0].json||{};const rawUrl=(input.podcast_url||input.audio_url||input.url||'').trim();const goal=(input.interest_goal||'General learning value for a busy knowledge worker').trim();const apiKey=(input.assemblyai_api_key||'YOUR_ASSEMBLYAI_API_KEY').trim();if(!rawUrl) throw new Error('Missing `podcast_url` or `audio_url`.');if(apiKey==='YOUR_ASSEMBLYAI_API_KEY') throw new Error('Replace YOUR_ASSEMBLYAI_API_KEY in the Code node, or pass `assemblyai_api_key` in the request body.');const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));const pick=(html,baseUrl,patterns)=>{for(const pattern of patterns){const m=html.match(pattern);if(m&&m[1]){try{return new URL(m[1],baseUrl).href;}catch{return m[1];}}}return null;};async function resolveMediaUrl(url){if(/\\.(mp3|m4a|mp4|wav|aac|ogg)(\\?|$)/i.test(url)) return url;let head=null;try{head=await fetch(url,{method:'HEAD',redirect:'follow'});}catch{}const headType=head?.headers?.get('content-type')||'';const headUrl=head?.url||url;if(headType.startsWith('audio/')||headType.startsWith('video/')) return headUrl;if(/\\.(mp3|m4a|mp4|wav|aac|ogg)(\\?|$)/i.test(headUrl)) return headUrl;const page=await fetch(url,{redirect:'follow'});const html=await page.text();const media=pick(html,page.url,[/property=[\"']og:audio[\"'][^>]*content=[\"']([^\"']+)[\"']/i,/name=[\"']twitter:player:stream[\"'][^>]*content=[\"']([^\"']+)[\"']/i,/<audio[^>]*src=[\"']([^\"']+)[\"']/i,/<source[^>]*src=[\"']([^\"']+)[\"']/i,/enclosure[^>]*url=[\"']([^\"']+)[\"']/i,/\"audio\"\\s*:\\s*\"([^\"]+)\"/i,/\"contentUrl\"\\s*:\\s*\"([^\"]+)\"/i]);if(media) return media;throw new Error('Could not find an audio URL on this page. Try a direct MP3/M4A link or an RSS episode link.');}const audioUrl=await resolveMediaUrl(rawUrl);const createRes=await fetch('https://api.assemblyai.com/v2/transcript',{method:'POST',headers:{Authorization:apiKey,'Content-Type':'application/json'},body:JSON.stringify({audio_url:audioUrl,auto_chapters:true,auto_highlights:true,speaker_labels:false,language_detection:true,summarization:true,summary_model:'informative',summary_type:'bullets'})});const created=await createRes.json();if(!createRes.ok||!created.id) throw new Error(`AssemblyAI submit failed: ${JSON.stringify(created)}`);let transcript=null;for(let i=0;i<90;i++){const pollRes=await fetch(`https://api.assemblyai.com/v2/transcript/${created.id}`,{headers:{Authorization:apiKey}});const data=await pollRes.json();if(!pollRes.ok) throw new Error(`AssemblyAI poll failed: ${JSON.stringify(data)}`);if(data.status==='completed'){transcript=data;break;}if(data.status==='error') throw new Error(`AssemblyAI transcription error: ${data.error||'unknown error'}`);await sleep(10000);}if(!transcript) throw new Error('Timed out waiting for transcript. Increase polling duration if your podcast is very long.');const highlights=(transcript.auto_highlights_result?.results||[]).slice(0,10).map(x=>x.text);const chapters=(transcript.chapters||[]).map(x=>({headline:x.headline,summary:x.summary,start_ms:x.start,end_ms:x.end}));const minutes=Math.round((transcript.audio_duration||0)/60);let score=5;if(highlights.length>=3) score+=1;if(highlights.length>=6) score+=1;if(chapters.length>=2) score+=1;if(chapters.length>=4) score+=1;if(transcript.summary) score+=1;if(minutes>=15&&minutes<=90) score+=1;if(minutes>120) score-=1;score=Math.max(1,Math.min(10,score));const recommendation=score>=8?'Worth a full listen.':'Read the summary first, then decide.';return [{json:{input_url:rawUrl,resolved_audio_url:audioUrl,interest_goal:goal,transcript_id:transcript.id,audio_minutes:minutes,estimated_value_score:score,recommendation,note:'The score is heuristic. Use chapters/highlights/summary to make the final decision.',assemblyai_summary:transcript.summary||'',key_highlights:highlights,chapters,transcript:transcript.text||''}}];"
+      },
+      "id": "Code_1",
+      "name": "Analyze Podcast",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "Respond_1",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Analyze Podcast",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Podcast": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "versionId": "1"
+}

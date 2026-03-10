@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Podcast Summary Evaluator</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">AssemblyAI Workflow, Minus n8n</p>
+        <h1>Podcast Summary Evaluator</h1>
+        <p class="lede">
+          貼上 podcast episode 連結、Apple Podcasts 單集頁，或直接貼 mp3/m4a。系統會嘗試解析音訊、產出逐字稿摘要，並快速估算這集值不值得完整收聽。
+        </p>
+      </section>
+
+      <section class="panel">
+        <form id="analyze-form" class="form">
+          <label>
+            <span>Podcast URL</span>
+            <input
+              type="url"
+              name="podcast_url"
+              placeholder="https://podcasts.apple.com/... 或 https://example.com/episode 或直接貼 mp3/m4a"
+              required
+            />
+          </label>
+
+          <label>
+            <span>Interest Goal</span>
+            <textarea
+              name="interest_goal"
+              rows="4"
+              placeholder="例如：我想判斷這集對 AI 產品經理是否有價值"
+            ></textarea>
+          </label>
+
+          <label>
+            <span>AssemblyAI API Key</span>
+            <input
+              type="password"
+              name="assemblyai_api_key"
+              placeholder="輸入你的 AssemblyAI API key"
+              required
+            />
+          </label>
+
+          <button type="submit" id="submit-button">開始分析</button>
+        </form>
+
+        <div id="status" class="status" aria-live="polite"></div>
+      </section>
+
+      <section id="result" class="result hidden">
+        <div class="result-header">
+          <p class="eyebrow">Result</p>
+          <h2 id="score-line"></h2>
+          <p id="meta-line" class="meta"></p>
+        </div>
+
+        <div class="result-grid">
+          <article class="card wide">
+            <h3>Summary</h3>
+            <div id="summary-text" class="prose"></div>
+          </article>
+
+          <article class="card">
+            <h3>Top Highlights</h3>
+            <ul id="highlights-list" class="list"></ul>
+          </article>
+
+          <article class="card">
+            <h3>Chapters</h3>
+            <ul id="chapters-list" class="list"></ul>
+          </article>
+
+          <article class="card wide">
+            <h3>Transcript</h3>
+            <details>
+              <summary>展開完整 transcript</summary>
+              <pre id="transcript-text" class="transcript"></pre>
+            </details>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

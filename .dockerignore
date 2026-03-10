@@ -1,0 +1,7 @@
+.git
+.github
+.DS_Store
+README.md
+podcast-transcript-summary-form-n8n.json
+podcast-transcript-summary-n8n.json
+npm-debug.log*
