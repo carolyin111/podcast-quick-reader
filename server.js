@@ -557,6 +557,20 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "GET" && req.url === "/api/debug/env") {
+      if (!requireAuth(req, res)) {
+        return;
+      }
+      sendJson(res, 200, {
+        appPasswordConfigured: Boolean(APP_PASSWORD),
+        assemblyAiApiKeyConfigured: Boolean(ASSEMBLYAI_API_KEY),
+        nodeEnv: process.env.NODE_ENV || "",
+        host: HOST,
+        port: PORT
+      });
+      return;
+    }
+
     if (req.method === "POST" && req.url === "/api/login") {
       if (!APP_PASSWORD) {
         sendJson(res, 200, { ok: true, passwordEnabled: false });
