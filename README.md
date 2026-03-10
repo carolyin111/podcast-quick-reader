@@ -23,32 +23,29 @@ Open `http://localhost:3000`.
 - Requires your own AssemblyAI API key
 - A long episode can take several minutes because the server polls AssemblyAI until transcription completes
 
-## GitHub Actions deployment
+## Deployment
 
-This repo includes:
+### GitHub Actions
 
-- CI: syntax check + Docker build on pull requests and pushes to `main`
-- Deploy: build Docker image, push to GHCR, then SSH into your server and restart the container
+This repo keeps a lightweight CI workflow in [.github/workflows/ci.yml](/Users/carolyin/codex/.github/workflows/ci.yml):
 
-### Required GitHub Actions secrets
+- Validate `server.js` syntax
+- Build the Docker image
 
-- `DEPLOY_HOST`: server IP or hostname
-- `DEPLOY_PORT`: SSH port, usually `22`
-- `DEPLOY_USER`: SSH user on the target server
-- `DEPLOY_SSH_KEY`: private key for that user
+### Zeabur
 
-### Remote server requirements
+This repo is configured for Zeabur deployment:
 
-- Docker installed
-- The deploy user can run `docker`
-- Port `3000` exposed, or change the workflow mapping if you want another port
+- [Dockerfile](/Users/carolyin/codex/Dockerfile) builds the app container
+- [zeabur.json](/Users/carolyin/codex/zeabur.json) declares port `3000` and `/health`
+- [server.js](/Users/carolyin/codex/server.js) listens on `0.0.0.0` and exposes `/health`
 
-### Deployment behavior
+To deploy on Zeabur:
 
-On every push to `main`, GitHub Actions will:
+1. Create a project in Zeabur
+2. Import GitHub repo `carolyin111/podcast-quick-reader`
+3. Let Zeabur detect the Dockerfile or use the included `zeabur.json`
+4. Deploy the service
+5. Bind a domain in Zeabur if needed
 
-1. Build the Docker image
-2. Push it to `ghcr.io/<owner>/podcast-summary-web:latest`
-3. SSH into your server
-4. Pull the latest image
-5. Recreate the `podcast-summary-web` container
+You do not need GitHub Actions deploy secrets for Zeabur. Pushes to GitHub can trigger redeploys through Zeabur's GitHub integration.

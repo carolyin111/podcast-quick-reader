@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.zeabur.com/configs/v1.json",
+  "build": {
+    "type": "dockerfile",
+    "dockerfile": "Dockerfile"
+  },
+  "deploy": {
+    "startCommand": "node server.js",
+    "healthCheckPath": "/health",
+    "port": 3000
+  }
+}
