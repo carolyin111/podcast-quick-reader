@@ -22,6 +22,7 @@ Open `http://localhost:3000`.
 
 - Requires `ASSEMBLYAI_API_KEY` in environment variables
 - Optional password gate via `APP_PASSWORD`
+- Stores up to 100 recent analysis results in `HISTORY_FILE` for the `/history` page
 - A long episode can take several minutes because the server polls AssemblyAI until transcription completes
 - Debug endpoint: `GET /api/debug/env` returns only whether required env vars are configured, and requires login when `APP_PASSWORD` is enabled
 
@@ -49,8 +50,11 @@ To deploy on Zeabur:
 3. In Zeabur environment variables, set:
    `ASSEMBLYAI_API_KEY=...`
    `APP_PASSWORD=...`
+   `HISTORY_FILE=/data/history.json` if you attach a persistent volume
 4. Let Zeabur detect the Dockerfile or use the included `zeabur.json`
 5. Deploy the service
 6. Bind a domain in Zeabur if needed
+
+For persistent history across redeploys, point `HISTORY_FILE` to a Zeabur volume path. Without persistent storage, history will reset when the container is replaced.
 
 You do not need GitHub Actions deploy secrets for Zeabur. Pushes to GitHub can trigger redeploys through Zeabur's GitHub integration.

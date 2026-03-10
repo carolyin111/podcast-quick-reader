@@ -109,7 +109,8 @@ h3 {
 
 input,
 textarea,
-button {
+button,
+.pill-link {
   font: inherit;
 }
 
@@ -140,6 +141,17 @@ button {
   transition: transform 160ms ease, background 160ms ease;
 }
 
+.pill-link {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 14px 22px;
+  background: rgba(141, 51, 22, 0.08);
+  color: var(--accent-dark);
+  text-decoration: none;
+  border: 1px solid rgba(141, 51, 22, 0.18);
+}
+
 .secondary-button {
   background: transparent;
   color: var(--accent-dark);
@@ -168,6 +180,29 @@ button:disabled {
 
 .result {
   margin-top: 28px;
+}
+
+.history-list {
+  display: grid;
+  gap: 18px;
+}
+
+.history-card {
+  display: grid;
+  gap: 14px;
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.history-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
 }
 
 .auth-shell {
@@ -250,5 +285,11 @@ summary {
 
   .wide {
     grid-column: span 1;
+  }
+
+  .history-header,
+  .history-columns {
+    grid-template-columns: 1fr;
+    display: grid;
   }
 }

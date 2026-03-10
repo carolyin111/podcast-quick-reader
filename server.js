@@ -6,8 +6,10 @@ const crypto = require("crypto");
 const HOST = process.env.HOST || "0.0.0.0";
 const PORT = Number(process.env.PORT || 3000);
 const PUBLIC_DIR = path.join(__dirname, "public");
+const DATA_DIR = path.join(__dirname, "data");
 const APP_PASSWORD = String(process.env.APP_PASSWORD || "").trim();
 const ASSEMBLYAI_API_KEY = String(process.env.ASSEMBLYAI_API_KEY || "").trim();
+const HISTORY_FILE = process.env.HISTORY_FILE || path.join(DATA_DIR, "history.json");
 const SESSION_COOKIE = "podcast_reader_session";
 const activeSessions = new Set();
 
@@ -55,6 +57,15 @@ function sendFile(res, filePath, headers = {}) {
 function sendHead(res, statusCode, contentType = "text/plain; charset=utf-8") {
   res.writeHead(statusCode, { "Content-Type": contentType });
   res.end();
+}
+
+async function ensureHistoryStore() {
+  await fs.promises.mkdir(path.dirname(HISTORY_FILE), { recursive: true });
+  try {
+    await fs.promises.access(HISTORY_FILE);
+  } catch {
+    await fs.promises.writeFile(HISTORY_FILE, "[]\n", "utf8");
+  }
 }
 
 function readJsonBody(req) {
@@ -122,6 +133,46 @@ function requireAuth(req, res) {
   }
   sendJson(res, 401, { error: "Unauthorized" });
   return false;
+}
+
+async function readHistory() {
+  await ensureHistoryStore();
+  const raw = await fs.promises.readFile(HISTORY_FILE, "utf8");
+  const parsed = JSON.parse(raw);
+  return Array.isArray(parsed) ? parsed : [];
+}
+
+async function writeHistory(entries) {
+  await ensureHistoryStore();
+  await fs.promises.writeFile(HISTORY_FILE, `${JSON.stringify(entries, null, 2)}\n`, "utf8");
+}
+
+function buildHistoryEntry(result) {
+  return {
+    id: crypto.randomUUID(),
+    created_at: new Date().toISOString(),
+    input_url: result.input_url,
+    resolved_audio_url: result.resolved_audio_url,
+    resolved_episode_link: result.resolved_episode_link,
+    resolved_rss_feed_url: result.resolved_rss_feed_url,
+    resolved_from: result.resolved_from,
+    interest_goal: result.interest_goal,
+    transcript_id: result.transcript_id,
+    speech_model_used: result.speech_model_used,
+    audio_minutes: result.audio_minutes,
+    estimated_value_score: result.estimated_value_score,
+    recommendation: result.recommendation,
+    assemblyai_summary: result.assemblyai_summary,
+    key_highlights: result.key_highlights,
+    chapters: result.chapters,
+    transcript: result.transcript
+  };
+}
+
+async function saveHistoryEntry(result) {
+  const history = await readHistory();
+  history.unshift(buildHistoryEntry(result));
+  await writeHistory(history.slice(0, 100));
 }
 
 function clampScore(score) {
@@ -493,7 +544,9 @@ async function analyzePodcast(body) {
   const mediaResolution = await resolveMediaUrl(rawUrl);
   const transcriptId = await createTranscript(mediaResolution.audioUrl, apiKey);
   const transcript = await pollTranscript(transcriptId, apiKey);
-  return buildAnalysisResult({ rawUrl, mediaResolution, goal, transcript });
+  const result = buildAnalysisResult({ rawUrl, mediaResolution, goal, transcript });
+  await saveHistoryEntry(result);
+  return result;
 }
 
 const server = http.createServer(async (req, res) => {
@@ -527,6 +580,16 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "GET" && req.url === "/history") {
+      if (!isAuthenticated(req)) {
+        res.writeHead(302, { Location: "/login" });
+        res.end();
+        return;
+      }
+      sendFile(res, path.join(PUBLIC_DIR, "history.html"));
+      return;
+    }
+
     if (req.method === "GET" && req.url === "/health") {
       sendJson(res, 200, { ok: true });
       return;
@@ -547,6 +610,11 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "GET" && req.url === "/history.js") {
+      sendFile(res, path.join(PUBLIC_DIR, "history.js"));
+      return;
+    }
+
     if (req.method === "GET" && req.url === "/login.js") {
       sendFile(res, path.join(PUBLIC_DIR, "login.js"));
       return;
@@ -564,10 +632,20 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, {
         appPasswordConfigured: Boolean(APP_PASSWORD),
         assemblyAiApiKeyConfigured: Boolean(ASSEMBLYAI_API_KEY),
+        historyFile: HISTORY_FILE,
         nodeEnv: process.env.NODE_ENV || "",
         host: HOST,
         port: PORT
       });
+      return;
+    }
+
+    if (req.method === "GET" && req.url === "/api/history") {
+      if (!requireAuth(req, res)) {
+        return;
+      }
+      const history = await readHistory();
+      sendJson(res, 200, { items: history });
       return;
     }
 

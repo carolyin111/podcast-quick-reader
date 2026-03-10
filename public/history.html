@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Podcast Summary History</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">Saved Results</p>
+        <h1>History</h1>
+        <p class="lede">這裡會列出最近的轉錄與摘要結果，方便之後回頭查看。</p>
+        <div class="hero-actions">
+          <a href="/" class="pill-link">回到分析頁</a>
+          <button type="button" id="logout-button" class="secondary-button">登出</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div id="history-status" class="status" aria-live="polite"></div>
+        <div id="history-list" class="history-list"></div>
+      </section>
+    </main>
+
+    <script src="/history.js"></script>
+  </body>
+</html>
